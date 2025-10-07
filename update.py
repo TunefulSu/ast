@@ -1,23 +1,33 @@
-#!/usr/bin/python3
-
+cat update.py                                                                                                                                                                                            ─╯
+#!/usr/bin/env python3
+"""
+ast 自更新脚本，独立进程，不占用自身文件句柄
+"""
 import os
-import time
+import sys
 import subprocess
+import tempfile
+import shutil
 
-snapshot = subprocess.check_output("/usr/local/sbin/ast c", shell=True)
-while True:
-    if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
-        time.sleep(20)
-    else:
-        os.system("/usr/local/sbin/ast clone $(/usr/local/sbin/ast c)")
-        os.system("/usr/local/sbin/ast auto-upgrade")
-        os.system("/usr/local/sbin/ast base-update")
-        break
+AST_GIT = "https://github.com/lambdanil/astOS.git"
+AST_DIR = "/usr/share/ast"
 
-upstate = open("/.snapshots/ast/upstate")
-line = upstate.readline()
-upstate.close()
+def run(cmd):
+    print(f":: {cmd}")
+    subprocess.run(cmd, shell=True, check=True)
 
-if "1" not in line:
-    os.system("/usr/local/sbin/ast deploy $(/usr/local/sbin/ast c)")
+def main():
+    if os.geteuid() != 0:
+        print("Must run as root")
+        sys.exit(1)
+    tmp = tempfile.mkdtemp()
+    try:
+        run(["git", "clone", "--depth", "1", AST_GIT, tmp])
+        run(["cp", "-r", f"{tmp}/astpk.py", f"{tmp}/main-cli.py", f"{tmp}/update.py", AST_DIR + "/"])
+        run(["sync"])
+        print("ast updated successfully – restart any open ast sessions")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
+if __name__ == "__main__":
+    main()
